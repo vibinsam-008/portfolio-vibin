@@ -60,23 +60,7 @@ export const ContactSection: React.FC = () => {
         } catch {}
       }
 
-      // If backend is not running (e.g. Netlify static mode), save to local inquiries
-      if (!isSuccess) {
-        const newInquiry = {
-          id: `inq-local-${Date.now()}`,
-          name: formName.trim(),
-          email: formEmail.trim(),
-          subject: formSubject.trim() || 'General Inquiry',
-          message: formMessage.trim(),
-          createdAt: new Date().toISOString(),
-          read: false
-        };
-        try {
-          const existing = JSON.parse(localStorage.getItem('vibin_local_inquiries') || '[]');
-          existing.unshift(newInquiry);
-          localStorage.setItem('vibin_local_inquiries', JSON.stringify(existing));
-        } catch {}
-      }
+      if (!isSuccess) throw new Error('Message could not be sent. Please try again.');
 
       setSubmitStatus({
         type: 'success',
@@ -87,30 +71,7 @@ export const ContactSection: React.FC = () => {
       setFormSubject('');
       setFormMessage('');
     } catch (err: any) {
-      // Even if network failed, log to localStorage so the message is not lost
-      const newInquiry = {
-        id: `inq-local-${Date.now()}`,
-        name: formName.trim(),
-        email: formEmail.trim(),
-        subject: formSubject.trim() || 'General Inquiry',
-        message: formMessage.trim(),
-        createdAt: new Date().toISOString(),
-        read: false
-      };
-      try {
-        const existing = JSON.parse(localStorage.getItem('vibin_local_inquiries') || '[]');
-        existing.unshift(newInquiry);
-        localStorage.setItem('vibin_local_inquiries', JSON.stringify(existing));
-      } catch {}
-
-      setSubmitStatus({
-        type: 'success',
-        message: 'Transmission dispatched. Your message was securely routed to Vibin\'s terminal inbox.'
-      });
-      setFormName('');
-      setFormEmail('');
-      setFormSubject('');
-      setFormMessage('');
+      setSubmitStatus({ type: 'error', message: 'Message could not be sent. Please try again.' });
     } finally {
       setSubmitting(false);
     }

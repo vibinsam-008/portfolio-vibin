@@ -1,3 +1,4 @@
+import { signup, requestPasswordRecovery } from '@netlify/identity';
 import React, { useState } from 'react';
 import { usePortfolio } from '../../context/PortfolioContext.tsx';
 import { Project, ProjectStatus, TechCategory, TechProficiency, LearningTrackItem, TechStackItem } from '../../types/portfolio.ts';
@@ -277,7 +278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                 )}
                 {isStaticHost && (
                   <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
-                    NETLIFY / STATIC MODE
+                    SHARED STORAGE UNAVAILABLE
                   </span>
                 )}
               </div>
@@ -407,10 +408,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                 {authLoading ? 'Verifying Token...' : 'Authenticate & Unlock'}
               </button>
             </form>
+            <button type="button" disabled={authLoading} className="mt-4 text-xs text-[#FCEE0A]" onClick={async () => {
+              if (emailInput.toLowerCase() !== 'vibinappachi@gmail.com') { setAuthError('Use the portfolio owner email address.'); return; }
+              setAuthLoading(true);
+              try { await signup(emailInput, passwordInput); setAuthError('Check your email to confirm your account, then sign in.'); }
+              catch (err) { setAuthError((err as Error).message); }
+              finally { setAuthLoading(false); }
+            }}>Create owner account</button>
+            <button type="button" disabled={authLoading} className="mt-3 text-xs text-[#A0A4AC]" onClick={async () => {
+              setAuthLoading(true);
+              try { await requestPasswordRecovery(emailInput); setAuthError('Check your email for the recovery link. After opening it, update your password in Security.'); }
+              catch (err) { setAuthError((err as Error).message); }
+              finally { setAuthLoading(false); }
+            }}>Reset password</button>
 
             <div className="mt-6 pt-4 border-t border-[rgba(255,255,255,0.06)] text-center w-full">
               <span className="font-mono text-[11px] text-[#A0A4AC]">
-                Default setup credentials configured for Vibin Apapchi A (vibinappachi@gmail.com). Initial password: <span className="text-[#FCEE0A]">vibin2030</span>.
+                Sign in with your verified administrator account. For first use, create the owner account and confirm the email link.
               </span>
             </div>
           </div>
@@ -1263,7 +1277,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                       Admin Credentials & Access
                     </h3>
                     <p className="text-xs font-mono text-[#A0A4AC]">
-                      Update authorized administrator email and master access password.
+                      Update the password for your verified administrator account.
                     </p>
                   </div>
 
@@ -1289,6 +1303,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                       <input
                         type="email"
                         value={newEmail}
+                        readOnly
                         onChange={(e) => setNewEmail(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg bg-[#08090A] border border-[rgba(255,255,255,0.1)] text-[#F5F5F5] font-mono text-xs"
                         required
