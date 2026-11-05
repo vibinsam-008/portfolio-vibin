@@ -123,7 +123,18 @@ EXPOSE 3000
 CMD ["npm", "start"]
 ```
 
-### Option C: Google Cloud Run
+### Option C: Netlify Deployment (Zero-Config Jamstack)
+This portfolio includes built-in dual-mode support for static hosting platforms like **Netlify**, **Vercel (static)**, and **GitHub Pages**:
+
+1. In your Netlify dashboard:
+   - **Build command**: `npm run build`
+   - **Publish directory**: `dist`
+2. Netlify uses the included `public/_redirects` and `netlify.toml` to automatically route SPA page refreshes to `/index.html`.
+3. In Netlify / Static mode:
+   - Admin authentication works seamlessly using the master password (`vibin2030` or your customized password).
+   - Edits are saved directly to local browser storage, and you can click the **Export JSON** button in the top bar to download or copy the updated portfolio data anytime.
+
+### Option D: Google Cloud Run / Docker
 Deploy with a single command:
 ```bash
 gcloud run deploy vibin-portfolio \

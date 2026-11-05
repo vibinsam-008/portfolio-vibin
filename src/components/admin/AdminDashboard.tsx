@@ -4,7 +4,8 @@ import { Project, ProjectStatus, TechCategory, TechProficiency, LearningTrackIte
 import { 
   X, Lock, Key, Save, Eye, EyeOff, RotateCcw, Plus, Trash2, Edit3, 
   Upload, Check, AlertCircle, ArrowUp, ArrowDown, Star, MessageSquare, 
-  Terminal, Layers, Sliders, Shield, LogOut, ExternalLink, Image as ImageIcon
+  Terminal, Layers, Sliders, Shield, LogOut, ExternalLink, Image as ImageIcon,
+  Download
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -19,6 +20,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     adminEmail, 
     isDraftMode, 
     inquiries,
+    isStaticHost,
     login, 
     logout, 
     updateDraft, 
@@ -27,7 +29,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     uploadImage, 
     toggleInquiryRead, 
     deleteInquiry,
-    setupAdminAccount 
+    setupAdminAccount,
+    exportJson,
+    importJson
   } = usePortfolio();
 
   // Navigation tab
@@ -236,6 +240,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     }));
   };
 
+  const handleExportJson = () => {
+    const json = exportJson();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vibin_portfolio_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification('success', 'portfolio.json exported successfully!');
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-[#08090A]/90 backdrop-blur-lg overflow-y-auto">
       <div 
@@ -259,6 +275,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                     UNSAVED DRAFT
                   </span>
                 )}
+                {isStaticHost && (
+                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
+                    NETLIFY / STATIC MODE
+                  </span>
+                )}
               </div>
               <div className="font-mono text-[11px] text-[#A0A4AC]">
                 {isAdmin ? `Authorized as ${adminEmail || 'Admin'}` : 'Restricted Access'}
@@ -269,6 +290,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
           <div className="flex items-center gap-2">
             {isAdmin && (
               <>
+                <button
+                  onClick={handleExportJson}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-[#A0A4AC] hover:text-[#FCEE0A] bg-[#161922] hover:bg-[#22262E] rounded-lg transition-colors cursor-pointer border border-[rgba(255,255,255,0.06)]"
+                  title="Export JSON Configuration Backup"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Export JSON</span>
+                </button>
+
                 {isDraftMode && (
                   <button
                     onClick={handleDiscard}
