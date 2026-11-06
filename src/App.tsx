@@ -13,7 +13,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard.tsx';
 import { Sliders, Save, RotateCcw, AlertTriangle } from 'lucide-react';
 
 const PortfolioContent: React.FC = () => {
-  const { isDraftMode, saveAndPublish, discardDraft } = usePortfolio();
+  const { isDraftMode, saveAndPublish, discardDraft, error } = usePortfolio();
   const [adminOpen, setAdminOpen] = useState(false);
   const [savingLive, setSavingLive] = useState(false);
 
@@ -42,7 +42,8 @@ const PortfolioContent: React.FC = () => {
 
   const handleLiveSave = async () => {
     setSavingLive(true);
-    await saveAndPublish();
+    const result = await saveAndPublish();
+    if (!result.success) window.alert(result.error || 'Publishing failed. Your draft is still available.');
     setSavingLive(false);
   };
 
@@ -76,6 +77,7 @@ const PortfolioContent: React.FC = () => {
         </div>
       )}
 
+      {error && <div role="alert" className="fixed top-0 inset-x-0 z-50 bg-amber-950 text-amber-100 text-center text-sm p-2">Shared content is temporarily unavailable. Please refresh to retry.</div>}
       {/* Floating Glass Navigation */}
       <Navbar onOpenAdmin={handleOpenAdmin} />
 

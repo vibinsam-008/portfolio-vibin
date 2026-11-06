@@ -4,7 +4,7 @@ A high-performance personal developer portfolio and engineering workspace built 
 
 Includes a private, persistent Admin Content Management Dashboard at `/admin` that allows full editing of projects, bio, tech stack, learning tracks, principles, and contact inquiries without modifying source code or redeploying.
 
-Designed with zero external vendor lock-in so it can be deployed seamlessly to **any host** (Node.js VPS, Docker, Cloud Run, Railway, Render, Fly.io, Vercel, etc.).
+Hosted on Netlify with shared database storage, image storage, and verified administrator authentication.
 
 ---
 
@@ -12,12 +12,9 @@ Designed with zero external vendor lock-in so it can be deployed seamlessly to *
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS v4, Motion, Lucide Icons.
 - **3D Graphics & HUD**: Three.js WebGL canvas displaying an interactive 3D polyhedral wireframe with real-time mouse tilt and coordinate tracking.
-- **Backend & API**: Express with full-stack Node.js server (`server.ts`).
-- **Persistence & Security**:
-  - Encrypted password hashing using Node.js native `crypto.scryptSync`.
-  - Cryptographic session token verification.
-  - Portable persistent data storage in `data/portfolio.json`, `data/admin.json`, and `data/inquiries.json`.
-  - High-resolution image asset upload handler in `/uploads` with strict mime-type validation and 5MB size boundaries.
+- **Backend & API**: Netlify Functions at `/api/*`.
+- **Persistence**: Netlify Database with Drizzle ORM for published portfolio content and inquiries; Netlify Blobs for uploaded images.
+- **Authentication**: Netlify Identity. Writes require the confirmed owner email or a server-assigned admin role.
 - **Build Tool**: Vite 8.
 
 ---
@@ -25,7 +22,7 @@ Designed with zero external vendor lock-in so it can be deployed seamlessly to *
 ## Quick Start (Local Development)
 
 ### 1. Prerequisites
-- Node.js 18+ installed.
+- Node.js 22+ and Netlify CLI installed.
 
 ### 2. Install Dependencies
 ```bash
@@ -34,9 +31,9 @@ npm install
 
 ### 3. Run Development Server
 ```bash
-npm run dev
+netlify dev --port 8889
 ```
-The server starts at `http://localhost:3000`.
+Open `http://localhost:8889` for the frontend and Netlify APIs. `npm run dev` starts the frontend only.
 
 ---
 
@@ -44,15 +41,13 @@ The server starts at `http://localhost:3000`.
 
 The portfolio includes a secure private admin interface accessible by clicking the **Admin** button in the header or navigating to `/admin`.
 
-### Default Credentials
-- **Email**: `vibinappachi@gmail.com`
-- **Master Password**: `vibin2030` *(or configure via `ADMIN_PASSWORD` in `.env`)*
+### First Sign-in
+Use **Create owner account** with `vibinappachi@gmail.com` and a new password, then confirm the email link and sign in. The old browser-only password and sessions no longer authorize publishing. Other administrators require a server-assigned `admin` role in Netlify Identity.
 
-### Updating Admin Credentials
-1. Log in to the Admin Dashboard.
-2. Select the **Security** tab from the left sidebar.
-3. Enter your updated email and a new master password (minimum 6 characters).
-4. Click **Update Admin Password**.
+Use **Reset password** to receive a recovery email. After opening the link, open the dashboard's **Security** tab to set a new password. The owner email stays unchanged.
+
+### Recovering Earlier Browser-only Edits
+On the original device, sign in to recover the locally stored portfolio as an unsaved draft. Review it and click **Publish Live** once to save it for everyone. Other devices load published content from the server; active pages refresh every 15 seconds and on window focus. Failed saves keep the draft and show an error.
 
 ---
 
@@ -93,67 +88,15 @@ The `/admin` dashboard allows updating all content on the live site:
 
 ---
 
-## Deployment to Any Host
+## Deployment on Netlify
 
-This repository is self-contained and requires no external proprietary services to run.
+The site publishes `dist` and deploys the functions in `netlify/functions`. Identity is enabled for the project. Database migrations in `netlify/database/migrations` are applied automatically during deployment. Preview databases are isolated from production. No redeploy is needed after publishing content in the dashboard.
 
-### Option A: Standard Node.js Host (VPS, Render, Railway, Fly.io)
-1. Build the frontend:
-   ```bash
-   npm run build
-   ```
-2. Start the production server:
-   ```bash
-   npm start
-   ```
-3. Set environment variables:
-   - `PORT=3000` (or host provided)
-   - `ADMIN_PASSWORD=your_secure_password`
-   - `JWT_SECRET=your_jwt_random_secret`
+Define schema changes in `db/schema.ts` and generate migrations using `npx drizzle-kit generate --name describe_change`. Do not apply migrations manually.
 
-### Option B: Docker Container
-```dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-EXPOSE 3000
-CMD ["npm", "start"]
-```
+Uploaded images support PNG, JPG, WEBP, and GIF up to 4MB each. Contact messages are stored in the shared database and are visible to signed-in administrators on every device. Unsuccessful submissions show an error and keep the entered message.
 
-### Option C: Netlify Deployment (Zero-Config Jamstack)
-This portfolio includes built-in dual-mode support for static hosting platforms like **Netlify**, **Vercel (static)**, and **GitHub Pages**:
-
-1. In your Netlify dashboard:
-   - **Build command**: `npm run build`
-   - **Publish directory**: `dist`
-2. Netlify uses the included `public/_redirects` and `netlify.toml` to automatically route SPA page refreshes to `/index.html`.
-3. In Netlify / Static mode:
-   - Admin authentication works seamlessly using the master password (`vibin2030` or your customized password).
-   - Edits are saved directly to local browser storage, and you can click the **Export JSON** button in the top bar to download or copy the updated portfolio data anytime.
-
-### Option D: Google Cloud Run / Docker
-Deploy with a single command:
-```bash
-gcloud run deploy vibin-portfolio \
-  --source . \
-  --platform managed \
-  --region asia-southeast1 \
-  --allow-unauthenticated
-```
-
----
-
-## Troubleshooting Common Issues
-
-1. **How do I reset my admin password if forgotten?**
-   Delete `data/admin.json` while the server is stopped, set `ADMIN_PASSWORD="newpassword"` in `.env`, and restart the server. It will recreate the admin credentials automatically.
-2. **Images not showing up?**
-   Uploaded images are stored in `/uploads` and served statically. Ensure the `uploads/` directory has write permissions on your hosting environment.
-3. **Port conflict?**
-   Set `PORT=8080` or any available port in your environment variables.
+Run `npm run lint` for TypeScript verification. The legacy `server.ts` is not used by the Netlify deployment or development command.
 
 ---
 
