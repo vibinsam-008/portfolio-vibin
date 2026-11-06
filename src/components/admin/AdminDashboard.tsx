@@ -1,12 +1,12 @@
-import { signup, requestPasswordRecovery } from '@netlify/identity';
 import React, { useState } from 'react';
 import { usePortfolio } from '../../context/PortfolioContext.tsx';
 import { Project, ProjectStatus, TechCategory, TechProficiency, LearningTrackItem, TechStackItem } from '../../types/portfolio.ts';
+import { SUPABASE_SQL_SETUP } from '../../lib/supabase.ts';
 import { 
   X, Lock, Key, Save, Eye, EyeOff, RotateCcw, Plus, Trash2, Edit3, 
   Upload, Check, AlertCircle, ArrowUp, ArrowDown, Star, MessageSquare, 
   Terminal, Layers, Sliders, Shield, LogOut, ExternalLink, Image as ImageIcon,
-  Download
+  Download, Database, Copy, FileCode
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -22,6 +22,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     isDraftMode, 
     inquiries,
     isStaticHost,
+    isSupabaseActive,
+    supabaseConfig,
+    configureSupabase,
+    disconnectSupabase,
     login, 
     logout, 
     updateDraft, 
@@ -32,11 +36,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     deleteInquiry,
     setupAdminAccount,
     exportJson,
+    exportCodeFile,
     importJson
   } = usePortfolio();
 
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'projects' | 'identity' | 'tech' | 'tracks' | 'principles' | 'contact' | 'visibility' | 'inquiries' | 'security'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'identity' | 'tech' | 'tracks' | 'principles' | 'contact' | 'visibility' | 'inquiries' | 'database' | 'security'>('projects');
+
+  // Supabase connection state
+  const [supaUrlInput, setSupaUrlInput] = useState(supabaseConfig?.url || '');
+  const [supaKeyInput, setSupaKeyInput] = useState(supabaseConfig?.key || '');
+  const [connectingSupa, setConnectingSupa] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Auth form state
   const [emailInput, setEmailInput] = useState(adminEmail || 'vibinappachi@gmail.com');
@@ -45,7 +56,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
   const [authLoading, setAuthLoading] = useState(false);
 
   // Status message
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Project editing modal state
@@ -77,9 +88,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     }
   };
 
-  const showNotification = (type: 'success' | 'error', message: string) => {
+  const showNotification = (type: 'success' | 'warning' | 'error', message: string) => {
     setFeedback({ type, message });
-    setTimeout(() => setFeedback(null), 4000);
+    setTimeout(() => setFeedback(null), 6000);
   };
 
   const handlePublish = async () => {
@@ -87,7 +98,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     const res = await saveAndPublish();
     setSaving(false);
     if (res.success) {
-      showNotification('success', 'Changes published live to server successfully!');
+      if (res.mode === 'cloud') {
+        showNotification('success', res.message || 'Published to Supabase Cloud! Changes are now live on your mobile phone and all devices.');
+      } else if (res.mode === 'server') {
+        showNotification('success', res.message || 'Changes published live to server database!');
+      } else {
+        showNotification('warning', res.message || 'Notice: Saved to this browser only. Connect Supabase in Cloud Database tab (or click Download Code) to reflect on mobile and other devices!');
+      }
     } else {
       showNotification('error', res.error || 'Failed to publish changes');
     }
@@ -253,6 +270,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     showNotification('success', 'portfolio.json exported successfully!');
   };
 
+  const handleDownloadCode = () => {
+    const code = exportCodeFile();
+    const blob = new Blob([code], { type: 'text/typescript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'defaultPortfolio.ts';
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification('success', 'defaultPortfolio.ts downloaded! Drop into src/data/ and push to GitHub for instant Netlify updates.');
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-[#08090A]/90 backdrop-blur-lg overflow-y-auto">
       <div 
@@ -276,11 +305,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                     UNSAVED DRAFT
                   </span>
                 )}
-                {isStaticHost && (
-                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
-                    SHARED STORAGE UNAVAILABLE
+                {isSupabaseActive ? (
+                  <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>SUPABASE CLOUD SYNC ACTIVE</span>
                   </span>
-                )}
+                ) : isStaticHost ? (
+                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
+                    LOCAL / STATIC HOST
+                  </span>
+                ) : null}
               </div>
               <div className="font-mono text-[11px] text-[#A0A4AC]">
                 {isAdmin ? `Authorized as ${adminEmail || 'Admin'}` : 'Restricted Access'}
@@ -292,8 +326,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
             {isAdmin && (
               <>
                 <button
+                  onClick={handleDownloadCode}
+                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-mono text-[#A0A4AC] hover:text-[#FCEE0A] bg-[#161922] hover:bg-[#22262E] rounded-lg transition-colors cursor-pointer border border-[rgba(255,255,255,0.06)]"
+                  title="Download defaultPortfolio.ts to commit to your GitHub repository"
+                >
+                  <FileCode className="w-3.5 h-3.5" />
+                  <span>Download Code</span>
+                </button>
+
+                <button
                   onClick={handleExportJson}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-[#A0A4AC] hover:text-[#FCEE0A] bg-[#161922] hover:bg-[#22262E] rounded-lg transition-colors cursor-pointer border border-[rgba(255,255,255,0.06)]"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-mono text-[#A0A4AC] hover:text-[#FCEE0A] bg-[#161922] hover:bg-[#22262E] rounded-lg transition-colors cursor-pointer border border-[rgba(255,255,255,0.06)]"
                   title="Export JSON Configuration Backup"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -342,12 +385,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
 
         {/* Global Feedback Banner */}
         {feedback && (
-          <div className={`px-6 py-2 text-xs font-mono flex items-center gap-2 shrink-0 ${
+          <div className={`px-6 py-2.5 text-xs font-mono flex items-center gap-2 shrink-0 ${
             feedback.type === 'success' 
-              ? 'bg-emerald-950/80 border-b border-emerald-500/40 text-emerald-300' 
-              : 'bg-red-950/80 border-b border-red-500/40 text-red-300'
+              ? 'bg-emerald-950/90 border-b border-emerald-500/40 text-emerald-300' 
+              : feedback.type === 'warning'
+              ? 'bg-amber-950/90 border-b border-amber-500/50 text-amber-200'
+              : 'bg-red-950/90 border-b border-red-500/40 text-red-300'
           }`}>
-            {feedback.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+            {feedback.type === 'success' ? (
+              <Check className="w-4 h-4 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0" />
+            )}
             <span>{feedback.message}</span>
           </div>
         )}
@@ -408,23 +457,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                 {authLoading ? 'Verifying Token...' : 'Authenticate & Unlock'}
               </button>
             </form>
-            <button type="button" disabled={authLoading} className="mt-4 text-xs text-[#FCEE0A]" onClick={async () => {
-              if (emailInput.toLowerCase() !== 'vibinappachi@gmail.com') { setAuthError('Use the portfolio owner email address.'); return; }
-              setAuthLoading(true);
-              try { await signup(emailInput, passwordInput); setAuthError('Check your email to confirm your account, then sign in.'); }
-              catch (err) { setAuthError((err as Error).message); }
-              finally { setAuthLoading(false); }
-            }}>Create owner account</button>
-            <button type="button" disabled={authLoading} className="mt-3 text-xs text-[#A0A4AC]" onClick={async () => {
-              setAuthLoading(true);
-              try { await requestPasswordRecovery(emailInput); setAuthError('Check your email for the recovery link. After opening it, update your password in Security.'); }
-              catch (err) { setAuthError((err as Error).message); }
-              finally { setAuthLoading(false); }
-            }}>Reset password</button>
 
             <div className="mt-6 pt-4 border-t border-[rgba(255,255,255,0.06)] text-center w-full">
               <span className="font-mono text-[11px] text-[#A0A4AC]">
-                Sign in with your verified administrator account. For first use, create the owner account and confirm the email link.
+                Default setup credentials configured for Vibin Apapchi A (vibinappachi@gmail.com). Initial password: <span className="text-[#FCEE0A]">vibin2030</span>.
               </span>
             </div>
           </div>
@@ -512,6 +548,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
               >
                 <MessageSquare className="w-4 h-4 shrink-0" />
                 <span>Inquiries ({inquiries.filter(i => !i.read).length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('database')}
+                className={`flex items-center justify-between px-3 py-2 rounded-lg text-left whitespace-nowrap transition-colors cursor-pointer ${
+                  activeTab === 'database' ? 'bg-[#FCEE0A] text-[#08090A] font-bold' : 'text-[#A0A4AC] hover:text-[#F5F5F5] hover:bg-[#161922]'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 shrink-0" />
+                  <span>Cloud Database</span>
+                </div>
+                {isSupabaseActive && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                )}
               </button>
 
               <button
@@ -1184,7 +1235,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                         </span>
                         <input
                           type="checkbox"
-                          checked={val}
+                          checked={Boolean(val)}
                           onChange={(e) => {
                             const checked = e.target.checked;
                             updateDraft(prev => ({
@@ -1269,6 +1320,150 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                 </div>
               )}
 
+              {/* TAB: CLOUD DATABASE (SUPABASE MULTI-DEVICE SYNC) */}
+              {activeTab === 'database' && (
+                <div className="space-y-6">
+                  <div className="pb-4 border-b border-[rgba(255,255,255,0.08)]">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-5 h-5 text-[#FCEE0A]" />
+                      <h3 className="text-lg font-bold text-[#F5F5F5] uppercase">
+                        Multi-Device Cloud Database Sync
+                      </h3>
+                    </div>
+                    <p className="text-xs font-mono text-[#A0A4AC] mt-1">
+                      Static hosts like Netlify do not run a server database. To make changes visible on your mobile phone and to all visitors worldwide, connect a free Supabase cloud database.
+                    </p>
+                  </div>
+
+                  {/* Status Banner */}
+                  <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${
+                    isSupabaseActive 
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
+                      : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${isSupabaseActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                      <div>
+                        <div className="font-mono text-xs font-bold uppercase">
+                          {isSupabaseActive ? 'CLOUD SYNC ACTIVE' : 'LOCAL BROWSER ONLY (Single Device)'}
+                        </div>
+                        <div className="text-xs opacity-80">
+                          {isSupabaseActive 
+                            ? 'Every change you save here is immediately synced to Supabase and visible on your mobile phone and all devices.'
+                            : 'Changes made now only save to this browser. Connect Supabase below to enable live multi-device syncing.'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isSupabaseActive && (
+                      <button
+                        onClick={() => {
+                          disconnectSupabase();
+                          showNotification('success', 'Supabase disconnected. Switched to local storage.');
+                        }}
+                        className="px-3 py-1.5 text-xs font-mono bg-red-950 hover:bg-red-900 border border-red-500/40 text-red-300 rounded-lg shrink-0 cursor-pointer"
+                      >
+                        Disconnect
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Connection Form */}
+                  <div className="cyber-glass rounded-xl p-6 border border-[rgba(255,255,255,0.08)] space-y-4">
+                    <h4 className="font-mono text-xs text-[#FCEE0A] uppercase tracking-wider">
+                      1. Connect Your Supabase Project
+                    </h4>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block font-mono text-xs text-[#A0A4AC] mb-1">
+                          Supabase Project URL
+                        </label>
+                        <input
+                          type="url"
+                          placeholder="https://your-project-id.supabase.co"
+                          value={supaUrlInput}
+                          onChange={(e) => setSupaUrlInput(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-lg bg-[#08090A] border border-[rgba(255,255,255,0.1)] focus:border-[#FCEE0A] text-[#F5F5F5] font-mono text-xs focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-mono text-xs text-[#A0A4AC] mb-1">
+                          Supabase Anon / Public API Key
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                          value={supaKeyInput}
+                          onChange={(e) => setSupaKeyInput(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-lg bg-[#08090A] border border-[rgba(255,255,255,0.1)] focus:border-[#FCEE0A] text-[#F5F5F5] font-mono text-xs focus:outline-none"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={connectingSupa || !supaUrlInput || !supaKeyInput}
+                        onClick={async () => {
+                          setConnectingSupa(true);
+                          const res = await configureSupabase(supaUrlInput, supaKeyInput);
+                          setConnectingSupa(false);
+                          if (res.success) {
+                            showNotification('success', 'Connected to Supabase! Your current portfolio was synced to the cloud.');
+                          } else {
+                            showNotification('error', res.error || 'Failed to connect. Check URL/Key or make sure table was created.');
+                          }
+                        }}
+                        className="px-5 py-2.5 rounded-lg bg-[#FCEE0A] hover:bg-[#DFFF00] text-[#08090A] font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <Database className="w-4 h-4" />
+                        <span>{connectingSupa ? 'Connecting & Uploading...' : 'Connect & Sync Cloud Database'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SQL Setup Instruction */}
+                  <div className="cyber-glass rounded-xl p-6 border border-[rgba(255,255,255,0.08)] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-mono text-xs text-[#FCEE0A] uppercase tracking-wider">
+                        2. Required SQL Setup (Run once in Supabase SQL Editor)
+                      </h4>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
+                          setCopiedSql(true);
+                          setTimeout(() => setCopiedSql(false), 2500);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1 text-xs font-mono text-[#FCEE0A] hover:underline cursor-pointer"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>{copiedSql ? 'Copied SQL!' : 'Copy SQL Script'}</span>
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-[#A0A4AC]">
+                      Go to your Supabase project dashboard &rarr; <strong>SQL Editor</strong> &rarr; paste this and click <strong>Run</strong>:
+                    </p>
+
+                    <pre className="p-3 rounded-lg bg-[#08090A] border border-[rgba(255,255,255,0.06)] font-mono text-[11px] text-[#A0A4AC] overflow-x-auto leading-relaxed">
+                      {SUPABASE_SQL_SETUP}
+                    </pre>
+                  </div>
+
+                  {/* Alternative: No-Database Git Workflow */}
+                  <div className="cyber-glass rounded-xl p-6 border border-[rgba(255,255,255,0.08)] space-y-3">
+                    <h4 className="font-mono text-xs text-[#FCEE0A] uppercase tracking-wider">
+                      Alternative: No Database Needed (Git Repository Deploy)
+                    </h4>
+                    <p className="text-xs text-[#A0A4AC] leading-relaxed">
+                      If you do not want to set up Supabase, you can click <strong>Download Code</strong> in the top-right bar of this dashboard. It will download the updated <code className="text-[#FCEE0A]">defaultPortfolio.ts</code> file. Replace the file at <code className="text-[#FCEE0A]">src/data/defaultPortfolio.ts</code> in your GitHub repo and push—Netlify will rebuild and publish your changes to your phone and all visitors automatically!
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* TAB 9: SECURITY */}
               {activeTab === 'security' && (
                 <div className="space-y-6">
@@ -1277,7 +1472,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                       Admin Credentials & Access
                     </h3>
                     <p className="text-xs font-mono text-[#A0A4AC]">
-                      Update the password for your verified administrator account.
+                      Update authorized administrator email and master access password.
                     </p>
                   </div>
 
@@ -1303,7 +1498,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                       <input
                         type="email"
                         value={newEmail}
-                        readOnly
                         onChange={(e) => setNewEmail(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg bg-[#08090A] border border-[rgba(255,255,255,0.1)] text-[#F5F5F5] font-mono text-xs"
                         required

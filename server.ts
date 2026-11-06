@@ -136,7 +136,7 @@ app.post('/api/contact', (req: Request, res: Response) => {
       read: false
     };
 
-    let inquiries = [];
+    let inquiries: any[] = [];
     if (fs.existsSync(INQUIRIES_FILE)) {
       inquiries = JSON.parse(fs.readFileSync(INQUIRIES_FILE, 'utf-8'));
     }
